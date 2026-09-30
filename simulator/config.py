@@ -40,11 +40,17 @@ SIZE_PROFILES = {
         "employees_min": 3,
         "employees_max": 50,
 
-        "starting_cash_months_min": 1.0,
+        # Initial liquidity buffer.
+        "starting_cash_months_min": 2.0,
         "starting_cash_months_max": 6.0,
 
-        "debt_intensity": (0.05, 0.60),
-        "credit_utilization": (0.10, 0.80),
+        # Existing term debt as a percentage of annual revenue.
+        # Kept moderate so normal companies are not distressed
+        # immediately at simulation start.
+        "debt_intensity": (0.05, 0.40),
+
+        # Existing working-capital facility utilization.
+        "credit_utilization": (0.05, 0.45),
     },
 
     "small": {
@@ -54,11 +60,12 @@ SIZE_PROFILES = {
         "employees_min": 20,
         "employees_max": 300,
 
-        "starting_cash_months_min": 1.5,
+        "starting_cash_months_min": 2.0,
         "starting_cash_months_max": 6.0,
 
-        "debt_intensity": (0.10, 0.75),
-        "credit_utilization": (0.10, 0.85),
+        "debt_intensity": (0.08, 0.50),
+
+        "credit_utilization": (0.05, 0.50),
     },
 
     "medium": {
@@ -68,11 +75,12 @@ SIZE_PROFILES = {
         "employees_min": 100,
         "employees_max": 2_000,
 
-        "starting_cash_months_min": 2.0,
+        "starting_cash_months_min": 2.5,
         "starting_cash_months_max": 6.0,
 
-        "debt_intensity": (0.15, 0.90),
-        "credit_utilization": (0.10, 0.90),
+        "debt_intensity": (0.12, 0.60),
+
+        "credit_utilization": (0.05, 0.55),
     },
 }
 
@@ -96,7 +104,7 @@ SECTOR_PROFILES = {
             "general_retail",
         ],
 
-        "cogs_margin": (0.60, 0.85),
+        "cogs_margin": (0.60, 0.78),
 
         "cash_sales_pct": {
             "micro": (0.70, 0.98),
@@ -143,7 +151,7 @@ SECTOR_PROFILES = {
             "industrial_supplies",
         ],
 
-        "cogs_margin": (0.70, 0.90),
+        "cogs_margin": (0.72, 0.88),
 
         "cash_sales_pct": {
             "micro": (0.10, 0.50),
@@ -191,7 +199,7 @@ SECTOR_PROFILES = {
             "industrial_products",
         ],
 
-        "cogs_margin": (0.55, 0.85),
+        "cogs_margin": (0.55, 0.78),
 
         "cash_sales_pct": {
             "micro": (0.10, 0.40),
@@ -239,7 +247,7 @@ SECTOR_PROFILES = {
             "cloud_kitchen",
         ],
 
-        "cogs_margin": (0.25, 0.50),
+        "cogs_margin": (0.25, 0.45),
 
         "cash_sales_pct": {
             "micro": (0.60, 0.95),
@@ -287,7 +295,7 @@ SECTOR_PROFILES = {
             "legal_business_services",
         ],
 
-        "cogs_margin": (0.10, 0.40),
+        "cogs_margin": (0.10, 0.30),
 
         "cash_sales_pct": {
             "micro": (0.10, 0.40),
@@ -406,7 +414,35 @@ def validate_config():
 
     assert sum(HEALTH_SCORE_WEIGHTS.values()) == 1.0
 
-    print("FinShield configuration validated successfully.")
+    # Validate size ranges.
+    for size, profile in SIZE_PROFILES.items():
+
+        assert (
+            profile["annual_revenue_min"]
+            < profile["annual_revenue_max"]
+        )
+
+        assert (
+            profile["employees_min"]
+            <= profile["employees_max"]
+        )
+
+        assert (
+            0
+            <= profile["credit_utilization"][0]
+            <= profile["credit_utilization"][1]
+            <= 1
+        )
+
+        assert (
+            0
+            <= profile["debt_intensity"][0]
+            <= profile["debt_intensity"][1]
+        )
+
+    print(
+        "FinShield configuration validated successfully."
+    )
 
 
 if __name__ == "__main__":
