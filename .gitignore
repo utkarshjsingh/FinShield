@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# Generated datasets
+data/
+
+# Environment / local files
+.venv/
+venv/
+.env
+
+# IDE / temporary files
+.vscode/
+.idea/
+*.tmp

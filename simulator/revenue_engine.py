@@ -354,6 +354,7 @@ def generate_revenue_trajectory(
     company,
     months=HISTORY_MONTHS,
     start_date="2023-01-01",
+    shock_schedule=None,
 ):
     """
     Generate a complete monthly revenue trajectory.
@@ -367,13 +368,17 @@ def generate_revenue_trajectory(
 
     trajectory = []
 
+    if shock_schedule is None:
+        shock_schedule = [{"revenue_multiplier": 1.0} for _ in range(months)]
+
     for month_index in range(months):
 
+        shock = shock_schedule[month_index]
         revenue = generate_monthly_revenue(
             company=company,
             month_index=month_index,
             annual_growth_rate=annual_growth_rate,
-            shock_multiplier=1.0,
+            shock_multiplier=shock.get("revenue_multiplier", 1.0),
         )
 
         trajectory.append(
@@ -396,6 +401,12 @@ def generate_revenue_trajectory(
                         get_month_number(month_index),
                     ),
                     4
+                ),
+                "shock_active": bool(shock.get("active", False)),
+                "shock_type": shock.get("shock_type", "none"),
+                "shock_severity": shock.get("severity", "none"),
+                "revenue_shock_multiplier": round(
+                    shock.get("revenue_multiplier", 1.0), 4
                 ),
             }
         )

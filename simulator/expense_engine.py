@@ -429,6 +429,18 @@ def simulate_expenses(
             )
         )
 
+        expense_multiplier = row.get(
+            "expense_shock_multiplier",
+            1.0
+        )
+
+        payroll *= expense_multiplier
+        rent *= expense_multiplier
+        utilities *= expense_multiplier
+        marketing *= expense_multiplier
+        insurance *= expense_multiplier
+        other_expenses *= expense_multiplier
+
         operating_expenses = (
             payroll
             + rent

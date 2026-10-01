@@ -26,6 +26,9 @@ SMALL_SAMPLE_COMPANIES = 1_000
 MEDIUM_SAMPLE_COMPANIES = 10_000
 FINAL_COMPANIES = 100_000
 
+# Current active simulation size
+ACTIVE_COMPANIES = FINAL_COMPANIES
+
 
 # ============================================================
 # COMPANY SIZE PROFILES
@@ -40,16 +43,10 @@ SIZE_PROFILES = {
         "employees_min": 3,
         "employees_max": 50,
 
-        # Initial liquidity buffer.
         "starting_cash_months_min": 2.0,
         "starting_cash_months_max": 6.0,
 
-        # Existing term debt as a percentage of annual revenue.
-        # Kept moderate so normal companies are not distressed
-        # immediately at simulation start.
         "debt_intensity": (0.05, 0.40),
-
-        # Existing working-capital facility utilization.
         "credit_utilization": (0.05, 0.45),
     },
 
@@ -64,7 +61,6 @@ SIZE_PROFILES = {
         "starting_cash_months_max": 6.0,
 
         "debt_intensity": (0.08, 0.50),
-
         "credit_utilization": (0.05, 0.50),
     },
 
@@ -79,7 +75,6 @@ SIZE_PROFILES = {
         "starting_cash_months_max": 6.0,
 
         "debt_intensity": (0.12, 0.60),
-
         "credit_utilization": (0.05, 0.55),
     },
 }
@@ -160,15 +155,15 @@ SECTOR_PROFILES = {
         },
 
         "dso_days": {
-            "micro": (30, 120),
-            "small": (30, 120),
-            "medium": (30, 120),
+            "micro": (30, 100),
+            "small": (30, 100),
+            "medium": (30, 100),
         },
 
         "inventory_days": {
             "micro": (15, 120),
-            "small": (20, 120),
-            "medium": (20, 120),
+            "small": (20, 90),
+            "medium": (20, 90),
         },
 
         "dpo_days": {
@@ -252,13 +247,13 @@ SECTOR_PROFILES = {
         "cash_sales_pct": {
             "micro": (0.60, 0.95),
             "small": (0.50, 0.90),
-            "medium": (0.40, 0.85),
+            "medium": (0.30, 0.75),
         },
 
         "dso_days": {
             "micro": (5, 45),
             "small": (5, 60),
-            "medium": (10, 75),
+            "medium": (20, 90),
         },
 
         "inventory_days": {
@@ -323,7 +318,7 @@ SECTOR_PROFILES = {
 
         "payroll_intensity": "very_high",
         "rent_intensity": "medium",
-        "debt_intensity": "low_medium",
+        "debt_intensity": "medium",
 
         "seasonality_strength": 0.08,
     },
@@ -358,6 +353,14 @@ SHOCK_SEVERITY = {
     },
 }
 
+
+# ============================================================
+# SHOCK CONFIGURATION
+# ============================================================
+
+# Probability controls are implemented in shock_engine.py.
+# These ranges define the magnitude of a shock by severity.
+# They are synthetic simulation assumptions, not observed data.
 
 # ============================================================
 # RISK THRESHOLDS

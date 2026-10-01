@@ -348,7 +348,8 @@ def calculate_supplier_payments(
 
 def simulate_working_capital(
     company,
-    revenue_trajectory
+    revenue_trajectory,
+    shock_schedule=None,
 ):
 
     parameters = (
@@ -356,6 +357,12 @@ def simulate_working_capital(
             company
         )
     )
+
+    if shock_schedule is None:
+        shock_schedule = [
+            {"active": False}
+            for _ in revenue_trajectory
+        ]
 
     cash_sales_pct = parameters[
         "cash_sales_pct"
@@ -406,11 +413,12 @@ def simulate_working_capital(
         cogs_margin
     )
 
-    first_cash_sales, first_credit_sales = (
-        calculate_sales_components(
-            first_revenue,
-            cash_sales_pct
-        )
+    (
+        first_cash_sales,
+        first_credit_sales
+    ) = calculate_sales_components(
+        first_revenue,
+        cash_sales_pct
     )
 
     opening_ar = (
@@ -438,7 +446,7 @@ def simulate_working_capital(
         / 30
     )
 
-    # Opening balances are realistic but bounded.
+    # Opening balances are non-negative.
     opening_ar = max(
         opening_ar,
         0.0
@@ -470,8 +478,30 @@ def simulate_working_capital(
         )
     )
 
+    # --------------------------------------------------------
+    # Historical invoice / purchase cohorts
+    # --------------------------------------------------------
+
     credit_sales_history = []
+
     credit_purchase_history = []
+
+    # --------------------------------------------------------
+    # Rolling histories for stable financial ratios
+    # --------------------------------------------------------
+
+    recent_ar = []
+    recent_credit_sales = []
+
+    recent_inventory = []
+    recent_cogs = []
+
+    recent_ap = []
+    recent_credit_purchases = []
+
+    # --------------------------------------------------------
+    # Current balances
+    # --------------------------------------------------------
 
     results = []
 
@@ -479,40 +509,124 @@ def simulate_working_capital(
     inventory = opening_inventory
     accounts_payable = opening_ap
 
+    # ========================================================
+    # MONTHLY SIMULATION
+    # ========================================================
+
     for month_index, row in enumerate(
         revenue_trajectory
     ):
 
         revenue = row["revenue"]
 
+        shock = shock_schedule[
+            month_index
+        ]
+
         # ----------------------------------------------------
-        # SALES
+        # Apply monthly shock parameters
         # ----------------------------------------------------
 
-        cash_sales, credit_sales = (
-            calculate_sales_components(
-                revenue,
-                cash_sales_pct
+        month_dso_days = (
+            dso_days
+            * shock.get(
+                "dso_multiplier",
+                1.0
             )
+        )
+
+        month_inventory_days = (
+            inventory_days
+            * shock.get(
+                "inventory_multiplier",
+                1.0
+            )
+        )
+
+        month_cogs_margin = clamp(
+            cogs_margin
+            * shock.get(
+                "cogs_multiplier",
+                1.0
+            ),
+            0.01,
+            0.98,
+        )
+
+        month_dpo_days = (
+            dpo_days
+            * shock.get(
+                "dpo_multiplier",
+                1.0
+            )
+        )
+
+        # Keep shock-adjusted target assumptions
+        # financially bounded.
+        month_dso_days = clamp(
+            month_dso_days,
+            1,
+            180
+        )
+
+        month_inventory_days = clamp(
+            month_inventory_days,
+            1,
+            180
+        )
+
+        month_dpo_days = clamp(
+            month_dpo_days,
+            1,
+            180
+        )
+
+        # ----------------------------------------------------
+        # Payment profiles
+        # ----------------------------------------------------
+
+        month_customer_payment_profile = (
+            create_payment_profile(
+                month_dso_days
+            )
+        )
+
+        month_supplier_payment_profile = (
+            create_payment_profile(
+                month_dpo_days
+            )
+        )
+
+        # ====================================================
+        # SALES
+        # ====================================================
+
+        (
+            cash_sales,
+            credit_sales
+        ) = calculate_sales_components(
+            revenue,
+            cash_sales_pct
         )
 
         credit_sales_history.append(
             credit_sales
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # COLLECTIONS
-        # ----------------------------------------------------
+        # ====================================================
 
         collections = calculate_collections(
             credit_sales_history,
             month_index,
-            customer_payment_profile,
+            month_customer_payment_profile,
             opening_ar,
             opening_ar_fraction
         )
 
-        # Don't collect more than available AR + current credit sales.
+        # Collections cannot exceed available
+        # opening/current AR.
         collections = min(
             collections,
             accounts_receivable
@@ -528,25 +642,25 @@ def simulate_working_capital(
             0.0
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # COGS
-        # ----------------------------------------------------
+        # ====================================================
 
         cogs = calculate_cogs(
             revenue,
-            cogs_margin
+            month_cogs_margin
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # INVENTORY
-        # ----------------------------------------------------
+        # ====================================================
 
         beginning_inventory = inventory
 
         target_inventory = (
             calculate_target_inventory(
                 cogs,
-                inventory_days
+                month_inventory_days
             )
         )
 
@@ -563,9 +677,9 @@ def simulate_working_capital(
             0.0
         )
 
-        # ----------------------------------------------------
-        # PURCHASES / AP
-        # ----------------------------------------------------
+        # ====================================================
+        # PURCHASES / ACCOUNTS PAYABLE
+        # ====================================================
 
         credit_purchases = (
             purchases
@@ -585,7 +699,7 @@ def simulate_working_capital(
             calculate_supplier_payments(
                 credit_purchase_history,
                 month_index,
-                supplier_payment_profile,
+                month_supplier_payment_profile,
                 opening_ap,
                 opening_ap_fraction
             )
@@ -606,36 +720,157 @@ def simulate_working_capital(
             0.0
         )
 
-        # ----------------------------------------------------
-        # METRICS
-        # ----------------------------------------------------
+        # ====================================================
+        # ROLLING HISTORIES
+        # ====================================================
 
-        dso_estimated = (
+        recent_ar.append(
             accounts_receivable
-            / max(credit_sales, 1)
-            * 30
         )
 
-        inventory_days_estimated = (
+        recent_credit_sales.append(
+            credit_sales
+        )
+
+        recent_inventory.append(
             inventory
-            / max(cogs, 1)
-            * 30
         )
 
-        dpo_estimated = (
-            accounts_payable
-            / max(
-                credit_purchases,
-                1
-            )
-            * 30
+        recent_cogs.append(
+            cogs
         )
+
+        recent_ap.append(
+            accounts_payable
+        )
+
+        recent_credit_purchases.append(
+            credit_purchases
+        )
+
+        histories = [
+            recent_ar,
+            recent_credit_sales,
+            recent_inventory,
+            recent_cogs,
+            recent_ap,
+            recent_credit_purchases,
+        ]
+
+        for history in histories:
+
+            if len(history) > 3:
+                history.pop(0)
+
+        # ====================================================
+        # STABLE WORKING CAPITAL METRICS
+        # ====================================================
+
+        total_recent_credit_sales = (
+            sum(recent_credit_sales)
+        )
+
+        total_recent_cogs = (
+            sum(recent_cogs)
+        )
+
+        total_recent_credit_purchases = (
+            sum(recent_credit_purchases)
+        )
+
+        # ----------------------------------------------------
+        # DSO
+        # ----------------------------------------------------
+        #
+        # If there is virtually no credit-sales activity,
+        # DSO is not economically meaningful. We therefore
+        # return 0 rather than allowing a tiny denominator
+        # to create a huge artificial ratio.
+        #
+
+        if total_recent_credit_sales <= 0:
+
+            dso_estimated = 0.0
+
+        else:
+
+            dso_estimated = (
+                sum(recent_ar)
+                / total_recent_credit_sales
+                * 30
+            )
+
+            dso_estimated = clamp(
+                dso_estimated,
+                0,
+                180
+            )
+
+        # ----------------------------------------------------
+        # INVENTORY DAYS
+        # ----------------------------------------------------
+
+        if total_recent_cogs <= 0:
+
+            inventory_days_estimated = 0.0
+
+        else:
+
+            inventory_days_estimated = (
+                sum(recent_inventory)
+                / total_recent_cogs
+                * 30
+            )
+
+            inventory_days_estimated = clamp(
+                inventory_days_estimated,
+                0,
+                180
+            )
+
+        # ----------------------------------------------------
+        # DPO
+        # ----------------------------------------------------
+
+        if total_recent_credit_purchases <= 0:
+
+            dpo_estimated = 0.0
+
+        else:
+
+            dpo_estimated = (
+                sum(recent_ap)
+                / total_recent_credit_purchases
+                * 30
+            )
+
+            dpo_estimated = clamp(
+                dpo_estimated,
+                0,
+                180
+            )
+
+        # ----------------------------------------------------
+        # CASH CONVERSION CYCLE
+        # ----------------------------------------------------
 
         cash_conversion_cycle = (
             dso_estimated
             + inventory_days_estimated
             - dpo_estimated
         )
+
+        # Keep the derived metric bounded to a sensible
+        # operational range.
+        cash_conversion_cycle = clamp(
+            cash_conversion_cycle,
+            -180,
+            360
+        )
+
+        # ====================================================
+        # OUTPUT RECORD
+        # ====================================================
 
         results.append(
             {
@@ -706,13 +941,39 @@ def simulate_working_capital(
                     cogs_margin,
 
                 "target_inventory_days":
-                    inventory_days,
+                    month_inventory_days,
 
                 "target_dso":
-                    dso_days,
+                    month_dso_days,
 
                 "target_dpo":
-                    dpo_days,
+                    month_dpo_days,
+
+                "shock_active":
+                    bool(
+                        shock.get(
+                            "active",
+                            False
+                        )
+                    ),
+
+                "shock_type":
+                    shock.get(
+                        "shock_type",
+                        "none"
+                    ),
+
+                "shock_severity":
+                    shock.get(
+                        "severity",
+                        "none"
+                    ),
+
+                "expense_shock_multiplier":
+                    shock.get(
+                        "expense_multiplier",
+                        1.0
+                    ),
 
                 "opening_ar":
                     opening_ar,
@@ -738,11 +999,18 @@ def print_working_capital_summary(
 
     latest = results[-1]
 
-    print("\n" + "=" * 70)
+    print(
+        "\n"
+        + "=" * 70
+    )
+
     print(
         "FINSHIELD WORKING CAPITAL ENGINE"
     )
-    print("=" * 70)
+
+    print(
+        "=" * 70
+    )
 
     print(
         f"Months simulated: "
@@ -804,7 +1072,9 @@ def print_working_capital_summary(
         f"{latest['cash_conversion_cycle']:.1f} days"
     )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
 
 # ============================================================
